@@ -5,7 +5,7 @@ let uid = Math.floor(Math.random() * 10000000).toString();
 let localStream;
 let remoteStream;
 let peerConnection;
-const ws = new WebSocket('ws://192.168.30.10:8765');
+let ws;
 
 const channel = 'signalling'
 const methods = {
@@ -28,52 +28,53 @@ const servers = {
     ]
 }
 
-let initWebsocket = async () => {
-
-    ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-    };
-
-    // Handle successful connection
-    ws.onopen = () => {
-        console.log('Connected to websocket server!');
-    };
-
-    // Handle incoming messages from the server
-    ws.onmessage = (event) => {
-        console.log('Received message: ', event.data);
-        let h4 = document.createElement('h4');
-        h4.textContent = event.data;
-        document.getElementById('messages').appendChild(h4);
-        handleMessage(event.data);
-        // You can process the received message here (e.g., display it or perform actions)
-    };
-
-    // (Optional) Handle closing the connection
-    ws.onclose = (event) => {
-        console.log('Connection closed! Code:', event.code, 'Reason:', event.reason);
-    };
-}
-
 let init = async () => {
     console.log('my id is ', uid);
     await getVideo();
     await createOffer();
-    await initWebsocket();
+    await initializeWebsocket();
     login(ws);
+
 }
-const getVideo = async()=>{
-    try{
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-    document.getElementById('user-1').srcObject = localStream;
-    }catch(e){
+function connect(url) {
+    return new Promise((resolve, reject) => {
+        const ws = new WebSocket(url);
+        ws.onopen = () => resolve(ws);
+        ws.onerror = reject;
+    });
+}
+const initializeWebsocket = (async () => {
+    try {
+        ws = await connect('ws://192.168.30.10:8765');
+        console.log("WebSocket connection opened!");
+        ws.onmessage = onMessage;
+    } catch (error) {
+        console.error("WebSocket connection error:", error);
+    }
+});
+
+const getVideo = async () => {
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        document.getElementById('user-1').srcObject = localStream;
+    } catch (e) {
         console.log("Can't get video: " + e);
         var h2 = document.createElement("h2");
-        h2.style="color:white"
+        h2.style = "color:white"
         h2.textContent = "Failed to access camera!";
         document.getElementById('user-1').textContent = "Failed to access camera!";
     }
 }
+// Handle incoming messages from the server
+const onMessage = (event) => {
+    console.log('Received message: ', event.data);
+    let h4 = document.createElement('h4');
+    h4.textContent = event.data;
+    document.getElementById('messages').appendChild(h4);
+    handleMessage(event.data);
+    // You can process the received message here (e.g., display it or perform actions)
+};
+
 const login = async (ws) => {
     ws.send(JSON.stringify({ method: methods.login, uid: uid }));
 }
@@ -89,41 +90,41 @@ const handleMessage = async (message) => {
         let offerData = { "method": "sendOffer", "data": await peerConnection.createOffer() };
         console.log('sending message', offerData)
         sendMessage(offerData)
-        
-    }else if (message[methods.method]){
+
+    } else if (message[methods.method]) {
 
     }
 }
-const sendMessage = async(data) =>{
+const sendMessage = async (data) => {
     // data["uid"] = uid;
     ws.send(data);
 }
 let createOffer = async () => {
-    try{
-    peerConnection = new RTCPeerConnection(servers);
-    remoteStream = new MediaStream();
-    document.getElementById('user-2').srcObject = remoteStream;
-    localStream.getTracks().forEach((track) => {
-        peerConnection.addTrack(track, localStream);
-    });
-    peerConnection.ontrack = (event) => {
-        event.streams[0].getTracks().forEach((track) => {
-            remoteStream.addTrack()
-        })
-    }
-    peerConnection.onicecandidate = async (event) => {
-        if (event.candidate) {
-            console.log('NEW ICE candidate: ', event.candidate)
+    try {
+        peerConnection = new RTCPeerConnection(servers);
+        remoteStream = new MediaStream();
+        document.getElementById('user-2').srcObject = remoteStream;
+        localStream.getTracks().forEach((track) => {
+            peerConnection.addTrack(track, localStream);
+        });
+        peerConnection.ontrack = (event) => {
+            event.streams[0].getTracks().forEach((track) => {
+                remoteStream.addTrack()
+            })
         }
-    }
-    let offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
-    console.log('Offer: ', offer);
-    }catch(e){
+        peerConnection.onicecandidate = async (event) => {
+            if (event.candidate) {
+                console.log('NEW ICE candidate: ', event.candidate)
+            }
+        }
+        let offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        console.log('Offer: ', offer);
+    } catch (e) {
         console.error('FAILED TO CREATE OFFER');
     }
 }
 
-window.onload = ()=>{
+window.onload = () => {
     init();
 }
